@@ -1,0 +1,2 @@
+# Dependências isoladas do processo FastMCP (não misturar com o cliente LangGraph).
+fastmcp==4.1.4
