@@ -9,6 +9,10 @@ langchain-core
 pandas
 pydantic
 
+# parte 5 (CrewAI)
+crewai>=0.150
+crewai-tools>=0.60
+
 # testes
 pytest
 requests

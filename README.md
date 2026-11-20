@@ -4,6 +4,8 @@ Projeto acadêmico de análise e auditoria de **Boletins de Urna (BUWeb)** do
 Tribunal Superior Eleitoral (TSE), com dados do Rio Grande do Norte. O notebook
 compara três formas de responder a perguntas eleitorais: agente único,
 Gerador–Verificador e Supervisor–Especialistas.
+Na Parte 5, o notebook repete as mesmas arquiteturas no CrewAI para
+comparativo direto com o LangGraph, usando as mesmas perguntas e métricas.
 
 As arquiteturas usam **LangGraph** para orquestrar os fluxos e **MCP (Model
 Context Protocol)** para conectar os agentes às ferramentas de consulta. O
