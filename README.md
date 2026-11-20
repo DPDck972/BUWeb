@@ -1,16 +1,15 @@
-# Análise de Boletins de Urna (BUWeb) — agentes LangGraph (Eleições RN)
+# Análise de Boletins de Urna (BUWeb) — agentes LangGraph e CrewAI (Eleições RN)
 
 Projeto acadêmico de análise e auditoria de **Boletins de Urna (BUWeb)** do
 Tribunal Superior Eleitoral (TSE), com dados do Rio Grande do Norte. O notebook
-compara três formas de responder a perguntas eleitorais: agente único,
-Gerador–Verificador e Supervisor–Especialistas.
-Na Parte 5, o notebook repete as mesmas arquiteturas no CrewAI para
-comparativo direto com o LangGraph, usando as mesmas perguntas e métricas.
+compara três arquiteturas de agentes:
 
-As arquiteturas usam **LangGraph** para orquestrar os fluxos e **MCP (Model
-Context Protocol)** para conectar os agentes às ferramentas de consulta. O
-servidor processa os dados com pandas; o modelo de linguagem interpreta a
-pergunta, escolhe ferramentas e redige a resposta em português.
+- **Agente único**: linha de base com um modelo e acesso às ferramentas MCP;
+- **Gerador + Verificador**: adiciona uma etapa de validação factual;
+- **Supervisor + Especialistas**: divide o trabalho entre busca, comparação e redação.
+
+As arquiteturas foram reproduzidas em **LangGraph** e **CrewAI** e avaliadas no
+Google Colab com o modelo local `qwen3:8b`, executado pelo Ollama.
 
 **DCA0305 · Machine Learning-Based Systems Design · UFRN**
 Baseado na *Lesson 12 — AI Agents III · Multi-agent*.
@@ -35,21 +34,48 @@ estimados pelo modelo. O modelo não tem uma ferramenta de acesso à internet.
 
 ---
 
-## 🧠 Arquiteturas
+## 🧠 Arquiteturas avaliadas
 
-| Arquitetura | Fluxo | Propósito |
-|---|---|---|
-| **Agente único** | modelo ⇄ ferramentas | Linha de base ReAct: decide quais consultas executar e responde. |
-| **Gerador + Verificador** | gerador ⇄ ferramentas → verificador | Confere a resposta contra os resultados das ferramentas e pode pedir uma revisão limitada. |
-| **Supervisor + Especialistas** | supervisor → especialistas → redator | Divide a tarefa entre buscador, comparador e analista de biometria antes de redigir a resposta. |
+| Arquitetura | LangGraph | CrewAI | Propósito |
+|---|---|---|---|
+| **Agente único** | Modelo e ferramentas MCP em um grafo ReAct | Um agente com ferramentas MCP | Linha de base de execução e redação. |
+| **Gerador + Verificador** | Gerador + verificador com validação programática | Agente assistente + agente verificador | Confere fatos contra os resultados das ferramentas. |
+| **Supervisor + Especialistas** | Supervisor, buscador, comparador e redator | Gerente hierárquico e agentes especialistas | Divide a tarefa em pesquisa, comparação e resposta final. |
+
+```mermaid
+flowchart LR
+    U[Usuário] --> F[Framework]
+
+    F --> A[Agente único]
+    A --> T1[Ferramentas MCP]
+    T1 --> A
+
+    F --> G[Gerador]
+    G --> T2[Ferramentas MCP]
+    T2 --> G
+    G --> V[Verificador]
+
+    F --> S[Supervisor]
+    S --> B[Especialista buscador]
+    S --> C[Especialista comparador]
+    B --> S
+    C --> S
+    S --> R[Resposta]
+
+    V --> R
+    A --> R
+```
+
+O Gerador–Verificador e o Supervisor–Especialistas adicionam etapas de controle,
+mas também podem aumentar latência e chamadas ao modelo.
 
 ### Fluxo MCP
 
 ```text
 ┌──────────────────────────────┐       stdio / JSON-RPC       ┌───────────────────────┐
-│ Agente LangGraph + Ollama    │ ◄──────────────────────────► │ Servidor FastMCP      │
-│ agente único / gerador /     │                               │ ferramentas eleitorais│
-│ supervisor e especialistas  │                               └───────────┬───────────┘
+│ LangGraph + Ollama          │ ◄──────────────────────────► │ Servidor FastMCP      │
+│ agente único /              │                               │ ferramentas eleitorais│
+│ gerador + verificador       │                               └───────────┬───────────┘
 └──────────────────────────────┘                                           │
                                                                            ▼
                                                               ┌────────────────────────┐
@@ -169,9 +195,75 @@ O notebook organiza o experimento em etapas:
 
 1. prepara e valida os dados BUWeb;
 2. configura o servidor MCP, o modelo e as ferramentas;
-3. executa o agente único, o Gerador–Verificador e o Supervisor–Especialistas;
-4. compara respostas com um gabarito calculado sobre o CSV e com a avaliação de
-   um juiz LLM.
+3. executa as três arquiteturas em LangGraph;
+4. repete o benchmark em CrewAI;
+5. compara as respostas com um gabarito calculado sobre o CSV e com um juiz LLM;
+6. consolida acertos, chamadas ao modelo e tempo de execução.
+
+---
+
+## 📊 Resultados comparativos no Colab
+
+O benchmark utilizou **20 perguntas**, com avaliação em duas dimensões:
+
+- **Checagem automática:** presença dos valores obrigatórios e ausência de afirmações proibidas;
+- **Juiz LLM:** correção semântica da resposta em relação ao gabarito oficial calculado com pandas.
+
+### Resultados por framework e arquitetura
+
+| Framework | Arquitetura | Checagem automática | Juiz LLM | Chamadas ao modelo | Tempo |
+|---|---|---:|---:|---:|---:|
+| LangGraph | Agente único | 16/20 | 19/20 | 37 | 128 s |
+| LangGraph | Gerador + Verificador | 17/20 | 19/20 | 73 | 657 s |
+| LangGraph | Supervisor + Especialistas | 9/20 | 11/20 | 145 | 356 s |
+| CrewAI | Agente único | 10/20 | 10/20 | 54 | 239 s |
+| CrewAI | Gerador + Verificador | 8/20 | 10/20 | 67 | 305 s |
+| CrewAI | Supervisor + Especialistas | 11/20 | 12/20 | 131 | 572 s |
+
+### Taxa de acerto do juiz semântico
+
+![Acerto do juiz semântico por arquitetura](docs/images/acerto-juiz.svg)
+
+- No **LangGraph**, o Agente Único e o Gerador–Verificador alcançaram **19/20**.
+- No **CrewAI**, o melhor resultado foi o **Supervisor + Especialistas**, com **12/20**.
+- O Supervisor LangGraph obteve **11/20**, evidenciando que a orquestração hierárquica
+  não foi automaticamente superior às arquiteturas mais simples nesta execução.
+
+### Custo operacional
+
+![Chamadas ao modelo por arquitetura](docs/images/chamadas-modelo.svg)
+
+- O **Agente Único LangGraph** teve o menor custo: **37 chamadas** e **128 s**.
+- O **Gerador–Verificador LangGraph** consumiu **73 chamadas** e **657 s**.
+- O **Supervisor LangGraph** consumiu **145 chamadas** e **356 s**.
+- Entre as três versões CrewAI, o Agente Único teve **54 chamadas**, o
+  Gerador–Verificador teve **67** e o Supervisor teve **131**.
+
+Os tempos do CrewAI variaram conforme loops internos de delegação e falhas na
+estruturação das respostas pelo Ollama. Foram observadas respostas vazias do
+modelo `qwen3:8b` e mensagens internas de erro durante o experimento.
+
+### Conclusão comparativa
+
+**LangGraph** apresentou o melhor desempenho nesta execução:
+
+- maior taxa semântica com as arquiteturas Agente Único e Gerador–Verificador;
+- menor custo absoluto no Agente Único;
+- caminhos de execução mais previsíveis por meio de grafos explícitos;
+- controle programático mais rígido no Gerador–Verificador.
+
+**CrewAI** apresentou maior independência entre os agentes, mas ficou abaixo no
+benchmark do LangGraph:
+
+- o Agente Único ficou em **10/20** pelo juiz semântico;
+- o Gerador–Verificador ficou em **10/20**;
+- o Supervisor obteve a melhor taxa CrewAI, com **12/20**;
+- houve maior verbosidade, delegação interna e sensibilidade a respostas vazias
+  do modelo local.
+
+Esses números representam uma execução observada no conjunto específico de
+20 perguntas. Eles não devem ser interpretados como garantia de desempenho para
+outras bases, modelos ou ambientes.
 
 ---
 
@@ -183,27 +275,9 @@ Com as dependências instaladas e o arquivo de dados disponível:
 python -m pytest -q
 ```
 
-Os testes de métricas usam modelos falsos, sem precisar iniciar o Ollama. A
-avaliação do notebook e os benchmarks com o modelo real requerem o Ollama e o
-CSV.
-
----
-
-## 📊 Resultados registrados
-
-O notebook registra uma avaliação de **20 perguntas**, com checagem automática,
-juiz LLM, quantidade de chamadas ao modelo e tempo:
-
-| Arquitetura | Checagem automática | Juiz LLM | Chamadas | Tempo |
-|---|---:|---:|---:|---:|
-| Agente único | 16/20 | 19/20 | 37 | 128 s |
-| Gerador + Verificador | 17/20 | 19/20 | 73 | 657 s |
-| Supervisor | 9/20 | 11/20 | 145 | 356 s |
-
-Esses números correspondem à execução registrada no Colab com `qwen3:8b`.
-Representam aquele conjunto de perguntas e aquela execução, não uma garantia de
-desempenho geral. O notebook também discute divergências entre a checagem
-automática e o juiz LLM.
+Os testes de métricas usam modelos falsos, sem necessidade de iniciar o Ollama.
+A avaliação do notebook e os benchmarks com o modelo real requerem o Ollama e o
+CSV BUWeb.
 
 ---
 

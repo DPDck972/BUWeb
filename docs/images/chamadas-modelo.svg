@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-labelledby="title desc">
+  <title id="title">Chamadas ao modelo por arquitetura</title>
+  <desc id="desc">Comparação do custo operacional LangGraph e CrewAI no benchmark de 20 perguntas.</desc>
+  <rect width="900" height="520" fill="#ffffff"/>
+  <text x="450" y="42" text-anchor="middle" font-family="Segoe UI, Arial" font-size="24" font-weight="700" fill="#172033">Chamadas ao modelo por arquitetura</text>
+  <line x1="90" y1="430" x2="830" y2="430" stroke="#475569" stroke-width="2"/><line x1="90" y1="430" x2="90" y2="80" stroke="#475569" stroke-width="2"/>
+  <g font-family="Segoe UI, Arial" font-size="14" fill="#64748b" text-anchor="end"><text x="75" y="434">0</text><text x="75" y="364">30</text><text x="75" y="294">60</text><text x="75" y="224">90</text><text x="75" y="154">120</text><text x="75" y="84">150</text></g>
+  <g stroke="#e2e8f0" stroke-width="1"><line x1="90" y1="360" x2="830" y2="360"/><line x1="90" y1="290" x2="830" y2="290"/><line x1="90" y1="220" x2="830" y2="220"/><line x1="90" y1="150" x2="830" y2="150"/><line x1="90" y1="80" x2="830" y2="80"/></g>
+  <g font-family="Segoe UI, Arial" font-size="16" fill="#0f172a" text-anchor="middle"><text x="210" y="462">Agente único</text><text x="450" y="462">Gerador + Verificador</text><text x="690" y="462">Supervisor</text></g>
+  <g>
+    <rect x="150" y="344" width="55" height="86" rx="4" fill="#2563eb"/><rect x="215" y="304" width="55" height="126" rx="4" fill="#f59e0b"/>
+    <rect x="390" y="260" width="55" height="170" rx="4" fill="#2563eb"/><rect x="455" y="274" width="55" height="156" rx="4" fill="#f59e0b"/>
+    <rect x="630" y="92" width="55" height="338" rx="4" fill="#2563eb"/><rect x="695" y="125" width="55" height="305" rx="4" fill="#f59e0b"/>
+  </g>
+  <g font-family="Segoe UI, Arial" font-size="15" font-weight="700" fill="#0f172a" text-anchor="middle"><text x="178" y="334">37</text><text x="243" y="294">54</text><text x="418" y="250">73</text><text x="483" y="264">67</text><text x="658" y="82">145</text><text x="723" y="115">131</text></g>
+  <g font-family="Segoe UI, Arial" font-size="14"><rect x="700" y="40" width="18" height="18" fill="#2563eb"/><text x="724" y="54" fill="#334155">LangGraph</text><rect x="700" y="65" width="18" height="18" fill="#f59e0b"/><text x="724" y="79" fill="#334155">CrewAI</text></g>
+</svg>
