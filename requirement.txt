@@ -5,9 +5,10 @@ langchain-mcp-adapters==0.3.2
 mcp>=1.24,<2
 langchain-core
 
-# dados
+# dados e monitoramento
 pandas
 pydantic
+psutil
 
 # parte 5 (CrewAI)
 crewai>=0.150
