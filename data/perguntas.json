@@ -1,0 +1,202 @@
+[
+  {
+    "id": "Q01",
+    "pergunta": "Me dá os detalhes da seção 505 da zona 3.",
+    "categoria": "item_especifico",
+    "ferramenta_esperada": "secao_details",
+    "tipo": "resposta",
+    "esperado": "Seção 505, NATAL: 460 aptos, 432 comparecimento, 28 abstenções, 39 sem biometria",
+    "checar": ["505", "432", "460", "28", "39"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q02",
+    "pergunta": "Quais os dados de comparecimento da seção 504 da zona 3?",
+    "categoria": "item_especifico",
+    "ferramenta_esperada": "secao_details",
+    "tipo": "resposta",
+    "esperado": "Seção 504, NATAL: 476 aptos, 435 comparecimento, 41 abstenções, 43 sem biometria",
+    "checar": ["504", "435", "476", "41", "43"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q03",
+    "pergunta": "Me dá os detalhes da seção 196 da zona 3.",
+    "categoria": "item_especifico",
+    "ferramenta_esperada": "secao_details",
+    "tipo": "resposta",
+    "esperado": "Seção 196, NATAL: 440 aptos, 381 comparecimento, 59 abstenções, 43 sem biometria",
+    "checar": ["196", "381", "440", "59", "43"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q04",
+    "pergunta": "Qual o município da seção 41 da zona 22?",
+    "categoria": "item_especifico",
+    "ferramenta_esperada": "secao_details",
+    "tipo": "resposta",
+    "esperado": "CARNAÚBA DOS DANTAS",
+    "checar": ["carnaúba", "dantas"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q05",
+    "pergunta": "Quais seções têm mais votos nulos no total geral?",
+    "categoria": "busca_filtro",
+    "ferramenta_esperada": "search_secoes",
+    "tipo": "resposta",
+    "esperado": "Top 5 por votos nulos (Governador + Presidente): 1) Zona 22, Seção 41, CARNAÚBA DOS DANTAS, 52 votos; 2) Zona 1, Seção 352, NATAL, 51 votos; 3) Zona 24, Seção 35, PARELHAS, 50 votos; 4) Zona 69, Seção 106, NATAL, 49 votos; 5) Zona 20, Seção 59, CURRAIS NOVOS, 49 votos.",
+    "checar": ["22", "41", "52"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q06",
+    "pergunta": "Quais seções têm mais votos nulos para Presidente?",
+    "categoria": "busca_filtro",
+    "ferramenta_esperada": "search_secoes",
+    "tipo": "resposta",
+    "esperado": "Top 5 por votos nulos para Presidente: 1) Zona 25, Seção 105, CAICÓ, 26 votos; 2) Zona 4, Seção 16, NATAL, 23 votos; 3) Zona 51, Seção 176, SÃO GONÇALO DO AMARANTE, 22 votos; 4) Zona 69, Seção 281, NATAL, 22 votos; 5) Zona 1, Seção 352, NATAL, 22 votos.",
+    "checar": ["25", "105", "26"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q07",
+    "pergunta": "Quais seções têm mais votos nulos para Governador?",
+    "categoria": "busca_filtro",
+    "ferramenta_esperada": "search_secoes",
+    "tipo": "resposta",
+    "esperado": "Top 5 por votos nulos para Governador: 1) Zona 24, Seção 35, PARELHAS, 37 votos; 2) Zona 22, Seção 41, CARNAÚBA DOS DANTAS, 36 votos; 3) Zona 69, Seção 106, NATAL, 35 votos; 4) Zona 20, Seção 59, CURRAIS NOVOS, 34 votos; 5) Zona 1, Seção 352, NATAL, 33 votos.",
+    "checar": ["24", "35", "37"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q08",
+    "pergunta": "Na zona 3, qual seção tem mais votos nulos?",
+    "categoria": "busca_filtro",
+    "ferramenta_esperada": "search_secoes",
+    "tipo": "resposta",
+    "esperado": "Seção 196, NATAL, com 34 votos nulos",
+    "checar": ["196", "34"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q09",
+    "pergunta": "Entre as seções 505 e 504 da zona 3, qual possui mais votos nulos no total geral (Governador + Presidente)?",
+    "categoria": "comparacao",
+    "ferramenta_esperada": "compare_secoes",
+    "tipo": "resposta",
+    "esperado": "504 tem mais: 17 vs 14",
+    "checar": ["504", "17", "14"],
+    "proibido": ["505 tem mais", "505 possui mais"]
+  },
+  {
+    "id": "Q10",
+    "pergunta": "Entre as seções 505 e 504 da zona 3, qual possui MENOS votos nulos no total geral (Governador + Presidente)?",
+    "categoria": "capciosa",
+    "ferramenta_esperada": "compare_secoes",
+    "tipo": "resposta",
+    "esperado": "505 tem menos: 14 vs 17 (inversão de critério em relação ao campo 'resposta' de compare_secoes)",
+    "checar": ["505", "14"],
+    "proibido": ["504 tem menos", "504 possui menos"]
+  },
+  {
+    "id": "Q11",
+    "pergunta": "Compara os votos nominais da seção 505 com a 504 da zona 3. Qual tem mais?",
+    "categoria": "comparacao",
+    "ferramenta_esperada": "compare_secoes",
+    "tipo": "resposta",
+    "esperado": "505 tem mais: 838 vs 834 nominais",
+    "checar": ["505", "838", "834"],
+    "proibido": ["não existe", "não encontrada", "504 tem mais"]
+  },
+  {
+    "id": "Q12",
+    "pergunta": "Entre as seções 505 e 76 da zona 3, qual possui mais votos nulos no total geral?",
+    "categoria": "comparacao",
+    "ferramenta_esperada": "compare_secoes",
+    "tipo": "resposta",
+    "esperado": "A seção 505 tem mais nulos: 14 vs 13",
+    "checar": ["505", "14", "13"],
+    "proibido": ["76 tem mais", "76 possui mais"]
+  },
+  {
+    "id": "Q13",
+    "pergunta": "Somando as seções 505 e 504 da zona 3, quantos votos nulos existem no total (Governador + Presidente)?",
+    "categoria": "calculo",
+    "ferramenta_esperada": "soma_secoes",
+    "tipo": "resposta",
+    "esperado": "31 votos nulos (14 + 17)",
+    "checar": ["31"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q14",
+    "pergunta": "Quantos eleitores sem biometria válida existem no total do arquivo?",
+    "categoria": "calculo",
+    "ferramenta_esperada": "total_sem_biometria",
+    "tipo": "resposta",
+    "esperado": "180.838 eleitores sem biometria válida (6,8% de 2.659.148 aptos em 8.115 seções)",
+    "checar": ["180.838"],
+    "proibido": ["não existe", "não encontrada"]
+  },
+  {
+    "id": "Q15",
+    "pergunta": "Qual o total de votos nominais no arquivo?",
+    "categoria": "calculo",
+    "ferramenta_esperada": "total_por_tipo",
+    "tipo": "resposta",
+    "esperado": "4.264.428",
+    "checar": ["4.264.428"],
+    "proibido": ["não existe"]
+  },
+  {
+    "id": "Q16",
+    "pergunta": "Quantos votos brancos existem no total?",
+    "categoria": "calculo",
+    "ferramenta_esperada": "total_por_tipo",
+    "tipo": "resposta",
+    "esperado": "55.812",
+    "checar": ["55.812"],
+    "proibido": ["não existe"]
+  },
+  {
+    "id": "Q17",
+    "pergunta": "Qual é a cor da seção 999 da zona 3?",
+    "categoria": "fora_escopo",
+    "ferramenta_esperada": null,
+    "tipo": "recusa",
+    "esperado": "RECUSA — seção 999 não existe no arquivo e o atributo 'cor' não consta no BU",
+    "checar": ["não existe", "não está", "não encontrad", "não há", "não foi encontrado", "não consta"],
+    "proibido": []
+  },
+  {
+    "id": "Q18",
+    "pergunta": "Entre as seções 505 e 500 da zona 3, qual possui mais votos nulos no total geral?",
+    "categoria": "capciosa",
+    "ferramenta_esperada": "compare_secoes",
+    "tipo": "resposta",
+    "esperado": "A seção 500 da zona 3 não existe no arquivo. Não é possível comparar.",
+    "checar": ["500", "não existe"],
+    "proibido": ["tem mais", "possui mais"]
+  },
+  {
+    "id": "Q19",
+    "pergunta": "Qual foi a intenção de voto para governador nas pesquisas?",
+    "categoria": "fora_escopo",
+    "ferramenta_esperada": null,
+    "tipo": "recusa",
+    "esperado": "RECUSA — dado de pesquisa eleitoral não existe no arquivo BUWeb",
+    "checar": ["não existe", "não está", "não tenho", "não posso", "não fornece", "não foi encontrado", "fora do escopo"],
+    "proibido": []
+  },
+  {
+    "id": "Q20",
+    "pergunta": "Qual é a capital do Rio Grande do Norte?",
+    "categoria": "fora_escopo",
+    "ferramenta_esperada": null,
+    "tipo": "recusa",
+    "esperado": "RECUSA — conhecimento externo, fora do escopo do Boletim de Urna",
+    "checar": ["não existe", "não está", "não posso", "fora do escopo", "só respondo", "apenas sobre", "não foi encontrado"],
+    "proibido": ["natal é a capital", "a capital é natal", "capital do rio grande do norte é natal"]
+  }
+]
