@@ -1,4 +1,4 @@
-"""Juiz LLM via Hugging Face Inference API conectado em modo somente leitura ao servidor MCP."""
+"""Juiz LLM via API do Groq (padrão: openai/gpt-oss-120b) ou Hugging Face, conectado ao servidor MCP em modo somente leitura."""
 from __future__ import annotations
 
 import asyncio
@@ -10,19 +10,50 @@ from typing import Any, Callable
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    RateLimitError,
+)
 
 from .config import get_servidor_config
 
+# ── Provedor padrão: Groq (API compatível com OpenAI) ─────────────────────────
+JUDGE_PROVIDER_DEFAULT = "groq"
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_JUDGE_MODEL_DEFAULT = "openai/gpt-oss-120b"
+GROQ_JUDGE_FALLBACK_MODEL = "llama-3.3-70b-versatile"
+
+# ── Provedor alternativo: Hugging Face Inference Router ───────────────────────
 HF_BASE_URL = os.getenv("HF_BASE_URL", "https://router.huggingface.co/v1")
 HF_JUDGE_MODEL_DEFAULT = "Qwen/Qwen2.5-72B-Instruct"
-# Fallback documentado caso o modelo padrão esteja indisponível ou com limite de taxa:
 HF_JUDGE_FALLBACK_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
 
 
-def get_judge_model(model: str | None = None) -> str:
-    """Resolve o modelo do juiz via argumento ou variável de ambiente HF_JUDGE_MODEL."""
-    return model or os.getenv("HF_JUDGE_MODEL", HF_JUDGE_MODEL_DEFAULT)
+def get_judge_provider(provider: str | None = None) -> str:
+    """Resolve o provedor do juiz ('groq' ou 'huggingface')."""
+    raw = (provider or os.getenv("JUDGE_PROVIDER") or JUDGE_PROVIDER_DEFAULT).strip().lower()
+    if raw in ("hf", "huggingface"):
+        return "huggingface"
+    if raw == "groq":
+        return "groq"
+    raise ValueError(
+        f"Provedor de juiz '{raw}' inválido. Use 'groq' ou 'huggingface'."
+    )
+
+
+def get_judge_model(model: str | None = None, provider: str | None = None) -> str:
+    """Resolve o modelo do juiz conforme argumento, variáveis de ambiente e provedor."""
+    if model:
+        return model
+    if os.getenv("JUDGE_MODEL"):
+        return os.environ["JUDGE_MODEL"]
+    prov = get_judge_provider(provider)
+    if prov == "groq":
+        return os.getenv("GROQ_JUDGE_MODEL", GROQ_JUDGE_MODEL_DEFAULT)
+    return os.getenv("HF_JUDGE_MODEL", HF_JUDGE_MODEL_DEFAULT)
 
 
 JUDGE_SYSTEM_PROMPT = """\
@@ -110,40 +141,72 @@ def _parse_judge_json(content: str) -> tuple[bool, str]:
             ).strip()
             return veredito, justificativa
 
-    # Fallback defensivo caso o modelo não devolva JSON estruturado
     baixa = texto.lower()
     veredito = '"veredito_juiz": true' in baixa or '"correta": true' in baixa
     return veredito, texto[:300] or "Sem justificativa retornada pelo juiz."
 
 
-def _build_default_client(base_url: str = HF_BASE_URL, api_key: str | None = None) -> AsyncOpenAI:
+def _build_default_client(
+    provider: str | None = None,
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> AsyncOpenAI:
+    prov = get_judge_provider(provider)
+    if prov == "groq":
+        resolved_url = base_url or os.getenv("GROQ_BASE_URL", GROQ_BASE_URL)
+        token = api_key or os.getenv("GROQ_API_KEY")
+        if not token:
+            raise EnvironmentError(
+                "Variável de ambiente GROQ_API_KEY não definida. "
+                "Configure GROQ_API_KEY com sua chave da API do Groq para usar o juiz "
+                f"({GROQ_JUDGE_MODEL_DEFAULT})."
+            )
+        return AsyncOpenAI(base_url=resolved_url, api_key=token)
+
+    resolved_url = base_url or os.getenv("HF_BASE_URL", HF_BASE_URL)
     token = api_key or os.getenv("HF_TOKEN")
     if not token:
         raise EnvironmentError(
             "Variável de ambiente HF_TOKEN não definida. "
             "Configure HF_TOKEN com seu token da Hugging Face Inference API para usar o juiz."
         )
-    return AsyncOpenAI(base_url=base_url, api_key=token)
+    return AsyncOpenAI(base_url=resolved_url, api_key=token)
+
+
+def _retry_after_seconds(exc: Exception) -> float | None:
+    resp = getattr(exc, "response", None)
+    headers = getattr(resp, "headers", None) if resp is not None else None
+    if not headers:
+        return None
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return None
 
 
 class MCPJudge:
-    """Juiz LLM via Hugging Face Router com acesso somente leitura às ferramentas MCP."""
+    """Juiz LLM (Groq openai/gpt-oss-120b por padrão, ou HF) com acesso somente leitura ao MCP."""
 
     def __init__(
         self,
         model: str | None = None,
+        provider: str | None = None,
         client: Any | None = None,
-        base_url: str = HF_BASE_URL,
+        base_url: str | None = None,
         api_key: str | None = None,
         max_tool_rounds: int = 5,
-        max_retries: int = 3,
+        max_retries: int = 4,
         retry_delay_s: float = 2.0,
         request_delay_s: float = 0.0,
         data_path: str | None = None,
         tools_schema: list[dict] | None = None,
         tool_executor: Callable[[str, dict], Any] | None = None,
     ):
-        self.model = get_judge_model(model)
+        self.provider = get_judge_provider(provider)
+        self.model = get_judge_model(model, provider=self.provider)
         self._client = client
         self._base_url = base_url
         self._api_key = api_key
@@ -161,7 +224,9 @@ class MCPJudge:
     def client(self):
         if self._client is None:
             self._client = _build_default_client(
-                base_url=self._base_url, api_key=self._api_key
+                provider=self.provider,
+                base_url=self._base_url,
+                api_key=self._api_key,
             )
         return self._client
 
@@ -230,7 +295,12 @@ class MCPJudge:
                     raise
 
             if attempt < self.max_retries:
-                backoff = self.retry_delay_s * (2**attempt)
+                retry_after = _retry_after_seconds(last_exc)
+                backoff = (
+                    retry_after
+                    if retry_after is not None
+                    else self.retry_delay_s * (2**attempt)
+                )
                 await asyncio.sleep(backoff)
 
         raise last_exc
@@ -247,7 +317,9 @@ class MCPJudge:
         if categoria:
             bloco_user.append(f"CATEGORIA:\n{categoria}")
         if esperado:
-            bloco_user.append(f"REFERÊNCIA AUXILIAR (confirme via MCP quando aplicável):\n{esperado}")
+            bloco_user.append(
+                f"REFERÊNCIA AUXILIAR (confirme via MCP quando aplicável):\n{esperado}"
+            )
         bloco_user.append(f"RESPOSTA DO ASSISTENTE:\n{resposta}")
 
         messages: list[dict[str, Any]] = [

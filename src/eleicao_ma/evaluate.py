@@ -18,7 +18,7 @@ from typing import Any
 import pandas as pd
 
 from .config import DATA_PATH, MODEL, OLLAMA_URL, ROOT, SERVER_LIBS, get_servidor_config
-from .judge import MCPJudge, get_judge_model
+from .judge import MCPJudge, get_judge_model, get_judge_provider
 
 PERGUNTAS_PATH = ROOT / "data" / "perguntas.json"
 DEFAULT_RESULTS_DIR = ROOT / "results"
@@ -194,6 +194,7 @@ def _detectar_gpu_info() -> str | None:
 def coletar_ambiente(
     modelo_local: str = MODEL,
     modelo_juiz: str | None = None,
+    provedor_juiz: str | None = None,
     server_libs: str | None = SERVER_LIBS,
 ) -> dict[str, Any]:
     """Coleta metadados reprodutíveis de hardware, modelos e versões de bibliotecas."""
@@ -215,6 +216,7 @@ def coletar_ambiente(
                 cpu_modelo = line.split(":", 1)[1].strip()
                 break
 
+    prov_resolvido = get_judge_provider(provedor_juiz)
     return {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "sistema_operacional": platform.platform(),
@@ -227,7 +229,8 @@ def coletar_ambiente(
         "gpu": _detectar_gpu_info(),
         "modelo_local": modelo_local,
         "quantizacao_modelo_local": _detectar_quantizacao_ollama(modelo_local),
-        "modelo_juiz": get_judge_model(modelo_juiz),
+        "provedor_juiz": prov_resolvido,
+        "modelo_juiz": get_judge_model(modelo_juiz, provider=prov_resolvido),
         "versoes": {
             "python": platform.python_version(),
             "langgraph": _versao_pacote("langgraph"),
@@ -243,11 +246,16 @@ def salvar_ambiente(
     output_dir: str | Path = DEFAULT_RESULTS_DIR,
     modelo_local: str = MODEL,
     modelo_juiz: str | None = None,
+    provedor_juiz: str | None = None,
 ) -> Path:
     """Grava `results/ambiente.json` e devolve o caminho gerado."""
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    ambiente = coletar_ambiente(modelo_local=modelo_local, modelo_juiz=modelo_juiz)
+    ambiente = coletar_ambiente(
+        modelo_local=modelo_local,
+        modelo_juiz=modelo_juiz,
+        provedor_juiz=provedor_juiz,
+    )
     dest = out / "ambiente.json"
     dest.write_text(json.dumps(ambiente, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return dest
@@ -285,8 +293,9 @@ async def executar_benchmark(
     perguntas: list[dict] | None = None,
     perguntas_path: str | Path | None = None,
     judge: MCPJudge | None = None,
+    judge_provider: str | None = None,
     judge_model: str | None = None,
-    judge_delay_s: float = 0.5,
+    judge_delay_s: float = 1.0,
     output_dir: str | Path = DEFAULT_RESULTS_DIR,
     modelo_local: str = MODEL,
     salvar_copia_timestamp: bool = True,
@@ -307,6 +316,7 @@ async def executar_benchmark(
         output_dir=out,
         modelo_local=modelo_local,
         modelo_juiz=judge.model if judge is not None else judge_model,
+        provedor_juiz=judge.provider if judge is not None else judge_provider,
     )
 
     linhas_resultados: list[dict[str, Any]] = []
@@ -410,7 +420,9 @@ async def executar_benchmark(
         await _rodar_com_juiz(judge)
     else:
         async with MCPJudge(
-            model=judge_model, request_delay_s=judge_delay_s
+            model=judge_model,
+            provider=judge_provider,
+            request_delay_s=judge_delay_s,
         ) as active_judge:
             await _rodar_com_juiz(active_judge)
 
@@ -443,8 +455,9 @@ async def executar_benchmark_completo_cli(
     output_dir: str | Path = DEFAULT_RESULTS_DIR,
     modelo_local: str = MODEL,
     ollama_url: str = OLLAMA_URL,
+    judge_provider: str | None = None,
     judge_model: str | None = None,
-    judge_delay_s: float = 0.5,
+    judge_delay_s: float = 1.0,
     sistemas_filtro: list[str] | None = None,
     data_path: str | Path | None = None,
 ):
@@ -500,6 +513,7 @@ async def executar_benchmark_completo_cli(
         return await executar_benchmark(
             sistemas,
             perguntas_path=perguntas_path,
+            judge_provider=judge_provider,
             judge_model=judge_model,
             judge_delay_s=judge_delay_s,
             output_dir=output_dir,
@@ -515,7 +529,7 @@ async def executar_benchmark_completo_cli(
 
 def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
-        description="Executa o benchmark multiagente BUWeb com Juiz LLM via Hugging Face + MCP."
+        description="Executa o benchmark multiagente BUWeb com Juiz LLM (Groq openai/gpt-oss-120b ou HF) + MCP."
     )
     parser.add_argument(
         "--perguntas",
@@ -533,14 +547,20 @@ def main(argv: list[str] | None = None):
         help="Modelo local no Ollama (padrão: qwen3:8b)",
     )
     parser.add_argument(
+        "--judge-provider",
+        default=None,
+        choices=["groq", "huggingface"],
+        help="Provedor do juiz (padrão: JUDGE_PROVIDER ou groq)",
+    )
+    parser.add_argument(
         "--judge-model",
         default=None,
-        help="Modelo do juiz no Hugging Face (padrão: HF_JUDGE_MODEL ou Qwen/Qwen2.5-72B-Instruct)",
+        help="Modelo do juiz (padrão Groq: openai/gpt-oss-120b; HF: Qwen/Qwen2.5-72B-Instruct)",
     )
     parser.add_argument(
         "--delay-judge",
         type=float,
-        default=0.5,
+        default=1.0,
         help="Atraso em segundos entre chamadas ao juiz para evitar rate limit",
     )
     parser.add_argument(
@@ -556,6 +576,7 @@ def main(argv: list[str] | None = None):
             perguntas_path=args.perguntas,
             output_dir=args.output_dir,
             modelo_local=args.model,
+            judge_provider=args.judge_provider,
             judge_model=args.judge_model,
             judge_delay_s=args.delay_judge,
             sistemas_filtro=args.sistemas,

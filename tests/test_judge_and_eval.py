@@ -213,8 +213,8 @@ def test_judge_consults_mcp_and_returns_structured_dict():
 
 
 def test_judge_retries_on_rate_limit():
-    req = httpx.Request("POST", "https://router.huggingface.co/v1/chat/completions")
-    resp = httpx.Response(429, request=req)
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    resp = httpx.Response(429, request=req, headers={"Retry-After": "0.001"})
     rl_error = RateLimitError("429 rate limited", response=resp, body=None)
 
     fake_client = FakeHFClient(
@@ -241,16 +241,32 @@ def test_judge_retries_on_rate_limit():
     assert fake_client.completions.calls == 2
 
 
-def test_judge_model_env_and_missing_token(monkeypatch):
-    monkeypatch.delenv("HF_JUDGE_MODEL", raising=False)
-    assert judge.get_judge_model() == "Qwen/Qwen2.5-72B-Instruct"
-    monkeypatch.setenv("HF_JUDGE_MODEL", judge.HF_JUDGE_FALLBACK_MODEL)
-    assert judge.get_judge_model() == "meta-llama/Llama-3.3-70B-Instruct"
+def test_judge_groq_default_and_hf_provider(monkeypatch):
+    for var in ("JUDGE_PROVIDER", "JUDGE_MODEL", "GROQ_JUDGE_MODEL", "HF_JUDGE_MODEL", "GROQ_API_KEY", "HF_TOKEN"):
+        monkeypatch.delenv(var, raising=False)
 
-    monkeypatch.delenv("HF_TOKEN", raising=False)
-    j = judge.MCPJudge()
+    # Padrão: Groq com openai/gpt-oss-120b
+    assert judge.get_judge_provider() == "groq"
+    assert judge.get_judge_model() == "openai/gpt-oss-120b"
+
+    j_groq = judge.MCPJudge()
+    assert j_groq.provider == "groq"
+    assert j_groq.model == "openai/gpt-oss-120b"
+    with pytest.raises(EnvironmentError, match="GROQ_API_KEY"):
+        _ = j_groq.client
+
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_test_key")
+    client_groq = judge.MCPJudge().client
+    assert "api.groq.com/openai/v1" in str(client_groq.base_url)
+
+    # Alternativa: Hugging Face com Qwen/Qwen2.5-72B-Instruct
+    assert judge.get_judge_model(provider="huggingface") == "Qwen/Qwen2.5-72B-Instruct"
+    monkeypatch.setenv("HF_JUDGE_MODEL", judge.HF_JUDGE_FALLBACK_MODEL)
+    assert judge.get_judge_model(provider="hf") == "meta-llama/Llama-3.3-70B-Instruct"
+
+    j_hf = judge.MCPJudge(provider="huggingface")
     with pytest.raises(EnvironmentError, match="HF_TOKEN"):
-        _ = j.client
+        _ = j_hf.client
 
 
 # ── 4. Pipeline completo: ambiente.json, CSVs e verificação manual ────────────
@@ -343,10 +359,13 @@ def test_evaluate_pipeline_generates_ambiente_and_csvs(tmp_path: Path):
         "gpu",
         "modelo_local",
         "quantizacao_modelo_local",
+        "provedor_juiz",
         "modelo_juiz",
         "versoes",
     ):
         assert chave in amb
+    assert amb["provedor_juiz"] == "groq"
+    assert amb["modelo_juiz"] == "openai/gpt-oss-120b"
     for lib in ("python", "langgraph", "crewai", "mcp", "fastmcp", "pandas"):
         assert lib in amb["versoes"]
 
