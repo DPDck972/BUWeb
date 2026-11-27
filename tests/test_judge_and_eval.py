@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import httpx
 import pandas as pd
 import pytest
-from openai import RateLimitError
+from openai import BadRequestError, RateLimitError
 
 from eleicao_ma import evaluate, judge
 from eleicao_ma.systems import SistemaAgente
@@ -267,6 +267,59 @@ def test_judge_groq_default_and_hf_provider(monkeypatch):
     j_hf = judge.MCPJudge(provider="huggingface")
     with pytest.raises(EnvironmentError, match="HF_TOKEN"):
         _ = j_hf.client
+
+
+def test_judge_recovers_from_groq_tool_use_failed():
+    req = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    resp = httpx.Response(400, request=req)
+    body = {
+        "error": {
+            "message": "attempted to call tool 'json' which was not in request.tools",
+            "type": "invalid_request_error",
+            "code": "tool_use_failed",
+            "failed_generation": json.dumps(
+                {
+                    "name": "json",
+                    "arguments": {
+                        "veredito_juiz": True,
+                        "justificativa_juiz": "Conferido no MCP.",
+                    },
+                }
+            ),
+        }
+    }
+    bad_req = BadRequestError("tool_use_failed", response=resp, body=body)
+    fake_client = FakeHFClient(
+        [
+            _make_completion(
+                content="",
+                tool_calls=[
+                    _make_tool_call("tc_1", "secao_details", {"zona": 3, "secao": 505})
+                ],
+            ),
+            bad_req,
+        ]
+    )
+
+    async def run():
+        async with judge.MCPJudge(
+            client=fake_client,
+            tools_schema=[
+                {
+                    "type": "function",
+                    "function": {"name": "secao_details", "parameters": {"type": "object"}},
+                }
+            ],
+            tool_executor=lambda n, a: {"zona": 3, "secao": 505, "aptos": 460},
+        ) as j:
+            return await j.avaliar("Pergunta", "Resposta correta")
+
+    res = asyncio.run(run())
+    assert res["veredito_juiz"] is True
+    assert res["justificativa_juiz"] == "Conferido no MCP."
+    assert res["consultas_juiz_mcp"] == [
+        {"ferramenta": "secao_details", "argumentos": {"zona": 3, "secao": 505}}
+    ]
 
 
 # ── 4. Pipeline completo: ambiente.json, CSVs e verificação manual ────────────

@@ -15,6 +15,7 @@ from openai import (
     APIStatusError,
     APITimeoutError,
     AsyncOpenAI,
+    BadRequestError,
     RateLimitError,
 )
 
@@ -69,7 +70,8 @@ REGRAS DE AVALIAÇÃO:
    - Em perguntas fora de escopo ou sobre seções/atributos inexistentes, o assistente recusa claramente sem inventar dados nem usar conhecimento externo.
 3. Uma resposta é INCORRETA (`veredito_juiz: false`) se inventa números, erra zona/seção, inverte comparações ("mais" vs "menos"),
    omite a resposta solicitada ou responde perguntas fora de escopo com conhecimento externo.
-4. Quando terminar a auditoria, responda APENAS com um objeto JSON válido no formato exato:
+4. Quando terminar a auditoria, NÃO chame nenhuma ferramenta adicional (nunca chame uma ferramenta chamada "json").
+   Responda diretamente em texto puro contendo APENAS um objeto JSON válido no formato exato:
    {"veredito_juiz": true, "justificativa_juiz": "explicação curta e objetiva em português"}
 """
 
@@ -154,7 +156,7 @@ def _build_default_client(
     prov = get_judge_provider(provider)
     if prov == "groq":
         resolved_url = base_url or os.getenv("GROQ_BASE_URL", GROQ_BASE_URL)
-        token = api_key or os.getenv("GROQ_API_KEY")
+        token = (api_key or os.getenv("GROQ_API_KEY") or "").strip()
         if not token:
             raise EnvironmentError(
                 "Variável de ambiente GROQ_API_KEY não definida. "
@@ -164,13 +166,39 @@ def _build_default_client(
         return AsyncOpenAI(base_url=resolved_url, api_key=token)
 
     resolved_url = base_url or os.getenv("HF_BASE_URL", HF_BASE_URL)
-    token = api_key or os.getenv("HF_TOKEN")
+    token = (api_key or os.getenv("HF_TOKEN") or "").strip()
     if not token:
         raise EnvironmentError(
             "Variável de ambiente HF_TOKEN não definida. "
             "Configure HF_TOKEN com seu token da Hugging Face Inference API para usar o juiz."
         )
     return AsyncOpenAI(base_url=resolved_url, api_key=token)
+
+
+def _extract_verdict_from_tool_use_failed(exc: BadRequestError) -> tuple[bool, str] | None:
+    """Recupera veredito quando provedores como Groq emitem tool_use_failed ao gerar JSON final."""
+    body = getattr(exc, "body", None)
+    err = body.get("error") if isinstance(body, dict) else None
+    if not isinstance(err, dict) or err.get("code") != "tool_use_failed":
+        return None
+    failed_gen = err.get("failed_generation")
+    if not isinstance(failed_gen, str) or "veredito_juiz" not in failed_gen:
+        return None
+    try:
+        parsed = json.loads(failed_gen)
+    except (json.JSONDecodeError, TypeError):
+        return _parse_judge_json(failed_gen)
+    if isinstance(parsed, dict) and isinstance(parsed.get("arguments"), dict):
+        args = parsed["arguments"]
+        if "veredito_juiz" in args:
+            return bool(args["veredito_juiz"]), str(
+                args.get("justificativa_juiz") or args.get("motivo") or ""
+            ).strip()
+    if isinstance(parsed, dict) and "veredito_juiz" in parsed:
+        return bool(parsed["veredito_juiz"]), str(
+            parsed.get("justificativa_juiz") or parsed.get("motivo") or ""
+        ).strip()
+    return None
 
 
 def _retry_after_seconds(exc: Exception) -> float | None:
@@ -331,7 +359,21 @@ class MCPJudge:
 
         for round_idx in range(self.max_tool_rounds + 1):
             allow_tools = round_idx < self.max_tool_rounds
-            completion = await self._call_llm_with_retry(messages, use_tools=allow_tools)
+            try:
+                completion = await self._call_llm_with_retry(messages, use_tools=allow_tools)
+            except BadRequestError as exc:
+                # Groq (ex.: openai/gpt-oss-120b) pode emitir tool_use_failed ao devolver JSON final
+                recovered = _extract_verdict_from_tool_use_failed(exc)
+                if recovered is not None:
+                    return {
+                        "veredito_juiz": bool(recovered[0]),
+                        "justificativa_juiz": recovered[1] or "Veredito recuperado da resposta final.",
+                        "consultas_juiz_mcp": consultas_mcp,
+                    }
+                if allow_tools:
+                    completion = await self._call_llm_with_retry(messages, use_tools=False)
+                else:
+                    raise
             msg = completion.choices[0].message
             tool_calls = getattr(msg, "tool_calls", None) or []
 
